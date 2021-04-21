@@ -53,7 +53,12 @@ class BackUpServer:
             """
             Polling is based on https://pymotw.com/2/select/
             """
-            read_sockets, _, exception_sockets = select.select(self.sockets_list, [], self.sockets_list, timeout)
+            if "server" in self.get_live_usernames():
+                read_sockets, _, exception_sockets = select.select(self.sockets_list, [], self.sockets_list)
+            else:
+                if timeout < 0:
+                    timeout = 0
+                read_sockets, _, exception_sockets = select.select(self.sockets_list, [], self.sockets_list, timeout)
             # if timeout has happened
             if not (read_sockets or exception_sockets):
                 # polling
@@ -109,37 +114,70 @@ class BackUpServer:
 
                 # Else existing socket is sending a message
                 else:
-                    # Receive username
-                    message = receive_file(notified_socket, header_length=HEADER_LENGTH)
+                    if "server" in self.get_live_usernames():
+                        # if server is till on
+                        q = queue.Queue()
+                        print("server is talking")
+                        try:
+                            while 1:
+                                # receive word from the client
+                                poll_msg = receive_file(notified_socket, HEADER_LENGTH)
+                                if poll_msg is False:
+                                    print(
+                                        'Closed connection from: {}'.format(
+                                            self.clients[notified_socket]['data'].decode('utf-8')))
+                                    # Remove from list for socket.socket()
+                                    self.sockets_list.remove(notified_socket)
+                                    # Remove from our list of users
+                                    del self.clients[notified_socket]
+                                    break
 
-                    # If False, client disconnected, cleanup
-                    if message is False:
-                        print(
-                            'Closed connection from: {}'.format(self.clients[notified_socket]['data'].decode('utf-8')))
-                        # Remove from list for socket.socket()
-                        self.sockets_list.remove(notified_socket)
-                        # Remove from our list of users
-                        del self.clients[notified_socket]
-                        continue
+                                elif poll_msg['data'].decode() == 'poll_end':
+                                    break
+                                else:
+                                    # put the polling word in the queue
+                                    q.put(poll_msg['data'].decode())
+                                    print("Word \'{}\' was polled from the main server.".format(poll_msg['data'].decode()))
+                        except select.error:
+                            start_time = time.time()
+                            print('Closed connection from server')
+                            self.sockets_list.remove(notified_socket)
+                            # Remove from our list of users
+                            del self.clients[notified_socket]
+                            continue
+                    else:
+                        # Receive username
+                        message = receive_file(notified_socket, header_length=HEADER_LENGTH)
 
-                    # filter out the text from the message
-                    username = self.clients[notified_socket]["data"].decode()
-                    path = "server_files/"
-                    client_file = "file_{}.txt".format(username)
-                    msg = message["data"].decode("utf-8")
-                    # save the text to a file
-                    save_file(msg, path, client_file)
+                        # If False, client disconnected, cleanup
+                        if message is False:
+                            print(
+                                'Closed connection from: {}'.format(self.clients[notified_socket]['data'].decode('utf-8')))
+                            # Remove from list for socket.socket()
+                            self.sockets_list.remove(notified_socket)
+                            # Remove from our list of users
+                            del self.clients[notified_socket]
+                            continue
 
-                    # Get user by notified socket, so we will know who sent the message
-                    user = self.clients[notified_socket]
-                    print('Received text from user:{}'.format(username))
+                        # filter out the text from the message
+                        username = self.clients[notified_socket]["data"].decode()
 
-                    # annotate misspelled words
-                    annotated_text = spelling_check(path + client_file, self.lexicon_list)
+                        path = "server_files/"
+                        client_file = "file_{}.txt".format(username)
+                        msg = message["data"].decode("utf-8")
+                        # save the text to a file
+                        save_file(msg, path, client_file)
 
-                    # print("sending {}".format(annotated_text))
-                    send_msg(notified_socket, annotated_text, HEADER_LENGTH)
-                    print("Sent annotated text back to user:{}".format(username))
+                        # Get user by notified socket, so we will know who sent the message
+                        user = self.clients[notified_socket]
+                        print('Received text from user:{}'.format(username))
+
+                        # annotate misspelled words
+                        annotated_text = spelling_check(path + client_file, self.lexicon_list)
+
+                        # print("sending {}".format(annotated_text))
+                        send_msg(notified_socket, annotated_text, HEADER_LENGTH)
+                        print("Sent annotated text back to user:{}".format(username))
 
             if self.shutdown:
                 break

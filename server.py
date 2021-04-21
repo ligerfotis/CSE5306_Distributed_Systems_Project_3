@@ -7,8 +7,8 @@ import socket
 import select
 import time
 
-from config import IP, PORT, polling_timeout, HEADER_LENGTH, lexicon_file
-from utils.utils import send_msg, receive_file, check_username, save_file
+from config import IP, PORT, polling_timeout, HEADER_LENGTH, lexicon_file, PORT_BackUp
+from utils.utils import send_msg, receive_file, check_username, save_file, set_up_username
 from utils.utils_server import update_lexicon, spelling_check, receive_msg
 
 """
@@ -36,16 +36,29 @@ class Server:
         self.lexicon_list = []
         self.shutdown = False
 
+        self.backup_login = False
+        self.backup_socket = None
+
     def main(self):
         """
         Main functionality of the server
         """
+        # try to connect to the back up server
+        print("Trying to connect to back up server: ")
+        self.backup_login = self.set_up_connection(IP, PORT_BackUp, "server")
+        # not logged in
+        if not self.backup_login:
+            print("Server could not login to backup")
+        else:
+            print('You are logged in!')
+
         print("Listening for connections on {}:{}...".format(IP, PORT))
         # load up the lexicon entries
         with open("server_files/" + lexicon_file, "r") as file:
             self.lexicon_list = file.readlines()[0].split(" ")
 
         start_time = time.time()
+        backup_dict = {}
         while True:
             # times out every 'polling_timeout' minutes to poll from clients
             # did this trick to take into consideration the time spent on exchanging files with clients
@@ -58,6 +71,7 @@ class Server:
             if not (read_sockets or exception_sockets):
                 # polling
                 q_dict = self.q_polling()
+                backup_dict = q_dict.copy()
                 # update lexicon
                 self.lexicon_list = update_lexicon(q_dict, self.lexicon_list)
                 # update lexicon file
@@ -141,9 +155,35 @@ class Server:
                     send_msg(notified_socket, annotated_text, HEADER_LENGTH)
                     print("Sent annotated text back to user:{}".format(username))
 
+            # update backup server
+            backup_dict = {"test"}
+            for word in backup_dict:
+                send_msg(self.backup_socket, word, HEADER_LENGTH)
+                print("The word \'{}\' was sent to the backup server.".format(word))
+            send_msg(self.backup_socket, "poll_end", HEADER_LENGTH)
+            print("Updated back up server.")
+
             if self.shutdown:
                 break
             self.handle_socket_exceptions(exception_sockets)
+
+    def set_up_connection(self, ip, port, username):
+        """
+        Sets up connection and username
+        :param username: username for this client
+        :return: True if connection succeeded and username has been established, False otherwise
+        """
+        try:
+            # set up the connection and establish a username to the server
+            response = set_up_username(ip, port, username, HEADER_LENGTH)
+            if response is not None:
+                self.username, self.backup_socket = response
+                return True
+            else:
+                return False
+        except Exception as e:
+            print(e)
+            return False
 
     def handle_socket_exceptions(self, exception_sockets):
         # It's not really necessary to have this, but will handle some socket exceptions just in case
