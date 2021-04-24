@@ -60,17 +60,18 @@ def spelling_check(file_to_checked, lexicon):
     return "".join(string_checked_text)
 
 
-def update_lexicon(word_queue_dict, lexicon):
+def update_lexicon(word_queue, lexicon):
     """
     Returns updated lexicon. Returned lexicon does not include duplicates
-    :param word_queue_dict: a dictionary of a queue of words for each user to be added in the lexicon
+    :param word_queue: a queue of words for each user to be added in the lexicon
     :param lexicon: list of words in lexicon
     :return: updated lexicon
     """
-    for word_queue in word_queue_dict.values():
-        while word_queue.qsize():
-            word = word_queue.get()
-            if word not in lexicon:
-                print("word \'{}\' added in the lexicon".format(word))
-                lexicon.append(word)
-    return lexicon
+    word_list = []
+    while word_queue.qsize():
+        word = word_queue.get()
+        if word not in lexicon:
+            print("word \'{}\' added in the lexicon".format(word))
+            word_list.append(word)
+            lexicon.append(word)
+    return lexicon, word_list

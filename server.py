@@ -2,6 +2,7 @@
 @author: Fotios Lygerakis
 @UTA ID: 1001774373
 """
+import copy
 import queue
 import socket
 import select
@@ -38,6 +39,7 @@ class Server:
 
         self.backup_login = False
         self.backup_socket = None
+        self.backup_list = []
 
     def main(self):
         """
@@ -58,7 +60,6 @@ class Server:
             self.lexicon_list = file.readlines()[0].split(" ")
 
         start_time = time.time()
-        backup_dict = {}
         while True:
             # times out every 'polling_timeout' minutes to poll from clients
             # did this trick to take into consideration the time spent on exchanging files with clients
@@ -71,9 +72,11 @@ class Server:
             if not (read_sockets or exception_sockets):
                 # polling
                 q_dict = self.q_polling()
-                backup_dict = q_dict.copy()
                 # update lexicon
-                self.lexicon_list = update_lexicon(q_dict, self.lexicon_list)
+                for q in q_dict.values():
+                    self.lexicon_list, backup_list = update_lexicon(q, self.lexicon_list)
+                    for word in backup_list:
+                        self.backup_list.append(word)
                 # update lexicon file
                 with open("server_files/lexicon.txt", "w") as file:
                     file.write(" ".join(self.lexicon_list))
@@ -156,13 +159,14 @@ class Server:
                     print("Sent annotated text back to user:{}".format(username))
 
             # update backup server
-            backup_dict = {"test"}
-            for word in backup_dict:
+            # self.backup_list.append("smth")
+            for word in self.backup_list:
                 send_msg(self.backup_socket, word, HEADER_LENGTH)
                 print("The word \'{}\' was sent to the backup server.".format(word))
             send_msg(self.backup_socket, "poll_end", HEADER_LENGTH)
             print("Updated back up server.")
-
+            # empty the back up word list after have sent it to the back up server
+            self.backup_list = []
             if self.shutdown:
                 break
             self.handle_socket_exceptions(exception_sockets)

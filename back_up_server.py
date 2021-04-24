@@ -7,7 +7,7 @@ import socket
 import select
 import time
 
-from config import IP, PORT_BackUp, polling_timeout, HEADER_LENGTH, lexicon_file
+from config import IP, PORT_BackUp, polling_timeout, HEADER_LENGTH, back_up_lexicon_file
 from utils.utils import send_msg, receive_file, check_username, save_file
 from utils.utils_server import update_lexicon, spelling_check, receive_msg
 
@@ -42,7 +42,7 @@ class BackUpServer:
         """
         print("Listening for connections on {}:{}...".format(IP, PORT_BackUp))
         # load up the lexicon entries
-        with open("server_files/" + lexicon_file, "r") as file:
+        with open("back_up_server_files/" + back_up_lexicon_file, "r") as file:
             self.lexicon_list = file.readlines()[0].split(" ")
 
         start_time = time.time()
@@ -60,13 +60,14 @@ class BackUpServer:
                     timeout = 0
                 read_sockets, _, exception_sockets = select.select(self.sockets_list, [], self.sockets_list, timeout)
             # if timeout has happened
-            if not (read_sockets or exception_sockets):
+            if not (read_sockets or exception_sockets) and "server" not in self.get_live_usernames():
                 # polling
                 q_dict = self.q_polling()
                 # update lexicon
-                self.lexicon_list = update_lexicon(q_dict, self.lexicon_list)
+                for q in q_dict.values():
+                    self.lexicon_list, _ = update_lexicon(q, self.lexicon_list)
                 # update lexicon file
-                with open("server_files/lexicon.txt", "w") as file:
+                with open("back_up_server_files/lexicon.txt", "w") as file:
                     file.write(" ".join(self.lexicon_list))
                 start_time = time.time()
 
@@ -114,9 +115,9 @@ class BackUpServer:
 
                 # Else existing socket is sending a message
                 else:
+                    q = queue.Queue()
                     if "server" in self.get_live_usernames():
                         # if server is till on
-                        q = queue.Queue()
                         print("server is talking")
                         try:
                             while 1:
@@ -145,6 +146,11 @@ class BackUpServer:
                             # Remove from our list of users
                             del self.clients[notified_socket]
                             continue
+                        # update lexicon
+                        self.lexicon_list, _ = update_lexicon(q, self.lexicon_list)
+                        # update lexicon file
+                        with open("back_up_server_files/lexicon.txt", "w") as file:
+                            file.write(" ".join(self.lexicon_list))
                     else:
                         # Receive username
                         message = receive_file(notified_socket, header_length=HEADER_LENGTH)

@@ -12,4 +12,5 @@ PORT = 1234
 # IP_BackUp
 PORT_BackUp = 1235
 lexicon_file = 'lexicon.txt'
-polling_timeout = 10  # in seconds
+back_up_lexicon_file = 'lexicon.txt'
+polling_timeout = 2  # in seconds
