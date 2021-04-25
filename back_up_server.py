@@ -20,6 +20,7 @@ class BackUpServer:
     def __init__(self):
 
         # Create a socket
+        self.is_main_server = False
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind((IP, PORT_BackUp))
@@ -59,17 +60,26 @@ class BackUpServer:
                 if timeout < 0:
                     timeout = 0
                 read_sockets, _, exception_sockets = select.select(self.sockets_list, [], self.sockets_list, timeout)
-            # if timeout has happened
-            if not (read_sockets or exception_sockets) and "server" not in self.get_live_usernames():
-                # polling
-                q_dict = self.q_polling()
-                # update lexicon
-                for q in q_dict.values():
-                    self.lexicon_list, _ = update_lexicon(q, self.lexicon_list)
-                # update lexicon file
-                with open("back_up_server_files/lexicon.txt", "w") as file:
-                    file.write(" ".join(self.lexicon_list))
-                start_time = time.time()
+            # back up is not yet in use
+            if not self.is_main_server:
+                username_list = self.get_live_usernames()
+                # a client has connected
+                if len(username_list) > 0 and "server" not in username_list:
+                    print("Back-Up Server assumed operation.")
+                    self.is_main_server = True
+            # back up has become main server
+            if self.is_main_server:
+                # if timeout has happened
+                if not (read_sockets or exception_sockets):
+                    # polling
+                    q_dict = self.q_polling()
+                    # update lexicon
+                    for q in q_dict.values():
+                        self.lexicon_list, _ = update_lexicon(q, self.lexicon_list)
+                    # update lexicon file
+                    with open("back_up_server_files/lexicon.txt", "w") as file:
+                        file.write(" ".join(self.lexicon_list))
+                    start_time = time.time()
 
             # Iterate over notified sockets
             for notified_socket in read_sockets:
@@ -118,7 +128,6 @@ class BackUpServer:
                     q = queue.Queue()
                     if "server" in self.get_live_usernames():
                         # if server is till on
-                        print("server is talking")
                         try:
                             while 1:
                                 # receive word from the client

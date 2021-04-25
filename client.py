@@ -6,7 +6,7 @@ import os
 import queue
 import select
 
-from config import HEADER_LENGTH, IP, PORT, PORT_BackUp
+from config import HEADER_LENGTH, IP, PORT_BackUp
 from utils.utils import send_msg, receive_file, save_file, set_up_username
 
 
@@ -134,4 +134,4 @@ class Client:
         ready = False
         while not ready:
             ready = self.set_up_connection(IP, PORT_BackUp, self.username)
-        print("Connected to backup server at {}".format(self.socket))
+        print("Connected to backup server at IP:{}, Port:{}".format(IP, PORT_BackUp))

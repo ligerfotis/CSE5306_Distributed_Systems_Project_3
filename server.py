@@ -2,7 +2,6 @@
 @author: Fotios Lygerakis
 @UTA ID: 1001774373
 """
-import copy
 import queue
 import socket
 import select
